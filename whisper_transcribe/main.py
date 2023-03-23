@@ -34,6 +34,9 @@ class Transcriber:
 
     """
 
+    MAX_TOTAL_TOKENS = 4096
+    MAX_PROMPT_TOKENS = 2900
+
     def __init__(
         self,
         api_key: str,
@@ -95,10 +98,14 @@ class Transcriber:
         text_list = text.split()
 
         while len(text_list) > 0:
+
             text_place_holder = ""
             token_nums = 0
+
+            # accumulate 2900 tokens worth of texts
+            # delete the accumulated texts from the list and make a call
             while (
-                token_nums < 2900 and len(text_list) > 0
+                token_nums < self.MAX_PROMPT_TOKENS and len(text_list) > 0
             ):  # token_nums limit needs to be optimized for better results
                 text_place_holder += " ".join(text_list[:100]) + " "
                 del text_list[:100]
@@ -110,7 +117,7 @@ class Transcriber:
                 "api_key": self.api_key,
                 "model": "text-davinci-003",
                 "temperature": 1.2,
-                "max_tokens": 4096 - count_tokens(prompt),
+                "max_tokens": self.MAX_TOTAL_TOKENS - count_tokens(prompt),
                 "prompt": prompt,
             }
 
@@ -121,7 +128,7 @@ class Transcriber:
 
         return response
 
-    def transcribe(self):
+    def transcribe(self) -> str:
         """Transcribe audio from a video file or URL
 
         Check the video_source. If URL, initiate download and save into a
@@ -137,9 +144,9 @@ class Transcriber:
         if self.video_source == VideoSource.URL:
             self.video_path = self._download_video()
 
-        with open(self.video_path, "rb") as af:
+        with open(self.video_path, "rb") as f:
             transcript = openai.Audio.transcribe(
-                "whisper-1", af, response_format=self.output, prompt=self.prompt
+                "whisper-1", f, response_format=self.output, prompt=self.prompt
             )
 
         return transcript
@@ -161,9 +168,9 @@ class Transcriber:
             )
             self.output = "text"
 
-        trasncript = self.transcribe()
-        summary = self.summarize(trasncript)
-        return (trasncript, summary)
+        transcript = self.transcribe()
+        summary = self.summarize(transcript)
+        return (transcript, summary)
 
     def __enter__(self):
         return self
