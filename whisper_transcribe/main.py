@@ -6,8 +6,8 @@ from typing import Tuple
 import openai
 import yt_dlp
 
-from helpers import VideoSource, check_if_valid, count_tokens
-from summarizer.api_call import APICaller
+from .helpers import VideoSource, check_if_valid, count_tokens
+from .summarizer.api_call import APICaller
 
 
 class Transcriber:
