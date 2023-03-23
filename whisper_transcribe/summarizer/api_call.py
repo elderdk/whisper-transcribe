@@ -1,14 +1,14 @@
 import openai
 from typing import Union
-from helpers import count_tokens
+from ..helpers import count_tokens
 
 
 class APICaller:
     """
-        "api_key": "sk-XXXXXXXXXXXXXXXXXXXXXXXXXXXXXX",
-        "model": "text-davinci-003",
-        "temperature": 1.2,
-        "max_allowed_tokens": 4096,
+    "api_key": "sk-XXXXXXXXXXXXXXXXXXXXXXXXXXXXXX",
+    "model": "text-davinci-003",
+    "temperature": 1.2,
+    "max_allowed_tokens": 4096,
     """
 
     def __init__(
