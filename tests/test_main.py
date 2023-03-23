@@ -28,3 +28,9 @@ def test_determine_source(instance):
 
     instance.video_path = "non-existence_video.mp4"
     assert instance._determine_source() == VideoSource.UNDETERMINED
+
+
+def test_raise_error_on_undeetermined_source(instance):
+    instance.video_path = "non-existence_video"
+    with pytest.raises(ValueError):
+        instance._determine_source()
