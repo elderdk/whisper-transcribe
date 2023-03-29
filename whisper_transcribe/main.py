@@ -1,3 +1,4 @@
+import logging
 import os
 from pathlib import Path
 from tempfile import NamedTemporaryFile
@@ -6,7 +7,7 @@ from typing import Tuple
 import openai
 import yt_dlp
 
-from .helpers import VideoSource, check_if_valid, count_tokens
+from .helpers import VideoSource, check_if_valid, count_tokens, chunk_generator
 from .summarizer.api_call import APICaller
 
 
@@ -18,6 +19,8 @@ class Transcriber:
         video_path (str): Path to video file or URL
         prompt (str, optional): Prompt to help WhisperAI transcribe the audio. Defaults to None.
         output (str, optional): Output format. Defaults to "text".
+        prompt_ratio (int, optional): How much token should be given to the request prompt. Defaults to 0.4 (40% of max token).
+        logging_level (int, optional): Logging level. Defaults to logging.INFO.
 
     Example:
         >>> from whisper_transcribe import Transcriber
@@ -26,16 +29,17 @@ class Transcriber:
             video_path = "path/to/a/local/video.mp4"
             prompt = "This prompt will help WhisperAI transcribe the audio."
             output = "srt"
+            prompt_ratio = 0.5
+            logging_level = logging.INFO
 
             with Transcriber(
-                api_key=api_key, video_path=video_path, output=output, prompt=prompt
+                api_key=api_key, video_path=video_path, output=output, prompt=prompt, prompt_ratio=prompt_ratio, logging_level=logging_level
             ) as t:
                 t.transcribe_and_summarize()
 
     """
 
     MAX_TOTAL_TOKENS = 4096
-    MAX_PROMPT_TOKENS = 2900
 
     def __init__(
         self,
@@ -43,12 +47,20 @@ class Transcriber:
         video_path: str,
         prompt: str = None,
         output: str = "text",
+        prompt_ratio: float = 0.4,
+        logging_level: int = logging.INFO,
     ):
         openai.api_key = api_key
+
+        logging.basicConfig(level=logging_level)
+        logging.basicConfig(format="%(levelname)s-%(message)s")
+
         self.api_key = api_key
         self.video_path = video_path
         self.output = output
         self.prompt = prompt
+        self.prompt_ratio = prompt_ratio
+        self.max_prompt_tokens = int(self.MAX_TOTAL_TOKENS * self.prompt_ratio)
         self.video_source = self._determine_source()
         check_if_valid(self)
 
@@ -80,28 +92,6 @@ class Transcriber:
 
         return tmp.name + ".m4a"
 
-    def _chunk_generator(self, text: str, jump_n: int = 100) -> str:
-        """Generate chunk for OpenAI Completion API
-
-        Args:
-            text (str): Text to be summarized
-            jump_n (int): Number of words to chunk together before counting the tokens
-
-        Returns:
-            chunk (str): chunk for OpenAI Completion API
-        """
-
-        word_list = text.split()
-        prompt_tokens = count_tokens("")
-
-        place_holder = ""
-        for i in range(0, len(word_list), jump_n):
-            place_holder += " ".join(word_list[i : i * 2 if i > 0 else jump_n])
-            if count_tokens(place_holder) + prompt_tokens > self.MAX_PROMPT_TOKENS:
-                chunk = place_holder
-                place_holder = ""
-                yield chunk
-
     def _summarize(self, text) -> str:
         """Summarize the given text using OpenAI Completipn API
 
@@ -117,24 +107,37 @@ class Transcriber:
             response (str): Summarized text
         """
 
+        call_count = 1
         response = ""
 
-        for chunk in self._chunk_generator(text):
+        for chunk in chunk_generator(
+            text, self.max_prompt_tokens, count_tokens(self.prompt)
+        ):
 
             prompt = "{}\n\n{}\ntl;dr".format(self.prompt if self.prompt else "", chunk)
+            prompt_token_count = count_tokens(prompt)
 
             data = {
                 "api_key": self.api_key,
                 "model": "text-davinci-003",
                 "temperature": 1.2,
-                "max_tokens": self.MAX_TOTAL_TOKENS - count_tokens(prompt),
+                "max_tokens": self.MAX_TOTAL_TOKENS - prompt_token_count,
                 "prompt": prompt,
             }
 
             api_caller = APICaller(**data)
+
+            logging.info(
+                " Summarizing...{}, prompt token count: {}, prompt length: {}".format(
+                    call_count, prompt_token_count, len(prompt)
+                )
+            )
+            call_count += 1
+            logging.debug(" Prompt: {}".format(prompt))
+
             result = api_caller.get_text_result()
 
-            response += result
+            response += " " + result.replace(":", "").strip()
 
         return response
 
@@ -153,6 +156,8 @@ class Transcriber:
 
         if self.video_source == VideoSource.URL:
             self.video_path = self._download_video()
+
+        logging.info("Transcribing audio from {}".format(self.video_path))
 
         with open(self.video_path, "rb") as f:
             transcript = openai.Audio.transcribe(
