@@ -80,7 +80,7 @@ class Transcriber:
 
         return tmp.name + ".m4a"
 
-    def summarize(self, text) -> str:
+    def _summarize(self, text) -> str:
         """Summarize the given text using OpenAI Completipn API
 
         Split the text into a list of words, then loop through the list
@@ -169,7 +169,7 @@ class Transcriber:
             self.output = "text"
 
         transcript = self.transcribe()
-        summary = self.summarize(transcript)
+        summary = self._summarize(transcript)
         return (transcript, summary)
 
     def __enter__(self):
