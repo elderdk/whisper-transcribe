@@ -47,9 +47,9 @@ def test_raise_error_on_invalid_output(instance):
         check_if_valid(instance)
 
 
-# def test_namedtemporaryfile_deleted(mocker, instance):
-#     mocker.patch("yt_dlp.YoutubeDL.download", return_value="")
-#     fname = instance._download_video()
-#     instance.__exit__()
+def test_namedtemporaryfile_deleted(instance):
+    tempfname = NamedTemporaryFile(delete=False).name
+    instance.video_path = tempfname
+    instance.__exit__("", "", "")
 
-#     assert Path(fname).is_file() == False
+    assert Path(tempfname).is_file() == False
