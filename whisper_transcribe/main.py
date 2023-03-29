@@ -80,6 +80,28 @@ class Transcriber:
 
         return tmp.name + ".m4a"
 
+    def _chunk_generator(self, text: str, jump_n: int = 100) -> str:
+        """Generate chunk for OpenAI Completion API
+
+        Args:
+            text (str): Text to be summarized
+            jump_n (int): Number of words to chunk together before counting the tokens
+
+        Returns:
+            chunk (str): chunk for OpenAI Completion API
+        """
+
+        word_list = text.split()
+        prompt_tokens = count_tokens("")
+
+        place_holder = ""
+        for i in range(0, len(word_list), jump_n):
+            place_holder += " ".join(word_list[i : i * 2 if i > 0 else jump_n])
+            if count_tokens(place_holder) + prompt_tokens > self.MAX_PROMPT_TOKENS:
+                chunk = place_holder
+                place_holder = ""
+                yield chunk
+
     def _summarize(self, text) -> str:
         """Summarize the given text using OpenAI Completipn API
 
@@ -94,28 +116,12 @@ class Transcriber:
         Returns:
             response (str): Summarized text
         """
+
         response = ""
-        text_list = text.split()
 
-        while len(text_list) > 0:
+        for chunk in self._chunk_generator(text):
 
-            text_place_holder = ""
-            token_nums = 0
-
-            # accumulate 2900 tokens worth of texts
-            # delete the accumulated texts from the list and make a call
-            while (
-                token_nums < self.MAX_PROMPT_TOKENS and len(text_list) > 0
-            ):  # token_nums limit needs to be optimized for better results
-                text_place_holder += " ".join(text_list[:100]) + " "
-                del text_list[:100]
-
-                prompt_tokens = count_tokens(self.prompt)
-                token_nums = count_tokens(text_place_holder) + prompt_tokens
-
-            prompt = "{}\n\n{}\ntl;dr".format(
-                self.prompt if self.prompt else "", text_place_holder
-            )
+            prompt = "{}\n\n{}\ntl;dr".format(self.prompt if self.prompt else "", chunk)
 
             data = {
                 "api_key": self.api_key,
