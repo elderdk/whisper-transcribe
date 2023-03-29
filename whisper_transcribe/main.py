@@ -109,9 +109,13 @@ class Transcriber:
             ):  # token_nums limit needs to be optimized for better results
                 text_place_holder += " ".join(text_list[:100]) + " "
                 del text_list[:100]
-                token_nums = count_tokens(text_place_holder)
 
-            prompt = "{}\n\ntl;dr".format(text_place_holder)
+                prompt_tokens = count_tokens(self.prompt)
+                token_nums = count_tokens(text_place_holder) + prompt_tokens
+
+            prompt = "{}\n\n{}\ntl;dr".format(
+                self.prompt if self.prompt else "", text_place_holder
+            )
 
             data = {
                 "api_key": self.api_key,
