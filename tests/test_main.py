@@ -3,8 +3,8 @@ from tempfile import NamedTemporaryFile
 from pathlib import Path
 import yt_dlp
 
-from ..whisper_transcribe.main import Transcriber, VideoSource
-from ..whisper_transcribe.helpers import check_if_valid
+from whisper_transcribe.main import Transcriber, VideoSource
+from whisper_transcribe.helpers import check_if_valid
 
 
 @pytest.fixture
