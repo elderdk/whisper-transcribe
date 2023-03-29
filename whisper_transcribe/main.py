@@ -23,14 +23,14 @@ class Transcriber:
         >>> from whisper_transcribe import Transcriber
 
             api_key = "sk-XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX"
-            vid = "path/to/a/local/video.mp4"
+            video_path = "path/to/a/local/video.mp4"
             prompt = "This prompt will help WhisperAI transcribe the audio."
             output = "srt"
 
             with Transcriber(
-                api_key=api_key, video_path=yt_vid, output=output, prompt=prompt
-            ) as tber:
-                tber.transcribe()
+                api_key=api_key, video_path=video_path, output=output, prompt=prompt
+            ) as t:
+                t.transcribe_and_summarize()
 
     """
 
