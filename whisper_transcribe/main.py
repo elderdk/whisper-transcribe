@@ -191,7 +191,7 @@ class Transcriber:
         return self
 
     def __exit__(self, exc_type, exc_value, traceback):
-        if self.video_source == VideoSource.URL:
+        if self.video_source == VideoSource.LOCAL:
             os.remove(self.video_path)
         return False
 
