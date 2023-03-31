@@ -21,6 +21,7 @@ class Transcriber:
         output (str, optional): Output format. Defaults to "text".
         prompt_ratio (int, optional): How much token should be given to the request prompt. Defaults to 0.4 (40% of max token).
         logging_level (int, optional): Logging level. Defaults to logging.INFO.
+        ffmepg_location (str, optional): Location of ffmpeg. Defaults to None.
 
     Example:
         >>> from whisper_transcribe import Transcriber
@@ -49,6 +50,7 @@ class Transcriber:
         output: str = "text",
         prompt_ratio: float = 0.4,
         logging_level: int = logging.INFO,
+        ffmpeg_location: str = None,
     ):
         openai.api_key = api_key
 
@@ -61,6 +63,7 @@ class Transcriber:
         self.prompt = prompt
         self.prompt_ratio = prompt_ratio
         self.max_prompt_tokens = int(self.MAX_TOTAL_TOKENS * self.prompt_ratio)
+        self.ffmpeg_location: ffmpeg_location
         self.video_source = self._determine_source()
         check_if_valid(self)
 
@@ -80,6 +83,7 @@ class Transcriber:
                 "outtmpl": tmp.name + ".m4a",
                 "overwrites": True,
                 "quiet": True,
+                "ffmpeg_location": self.ffmpeg_location,
                 "postprocessors": [
                     {  # Extract audio using ffmpeg
                         "key": "FFmpegExtractAudio",
