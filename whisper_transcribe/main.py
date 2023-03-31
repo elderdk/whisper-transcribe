@@ -63,7 +63,7 @@ class Transcriber:
         self.prompt = prompt
         self.prompt_ratio = prompt_ratio
         self.max_prompt_tokens = int(self.MAX_TOTAL_TOKENS * self.prompt_ratio)
-        self.ffmpeg_location: ffmpeg_location
+        self.ffmpeg_location = ffmpeg_location
         self.video_source = self._determine_source()
         check_if_valid(self)
 
