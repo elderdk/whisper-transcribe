@@ -67,7 +67,7 @@ class Transcriber:
 
             data = {
                 "prompt": "What would you do if you only have 24 hours?",
-                "response_format": "srt",
+                "response_format": "text",
                 "temperature": 0.5,
             }
 
@@ -97,13 +97,21 @@ class Transcriber:
             str: transcription
         """
 
+        default_data = {
+            "prompt": "What would you do if you only have 24 hours?",
+            "response_format": "text",
+            "temperature": 0.5,
+        }
+
+        default_data.update(**data)
+
         # Download the video if it's a URL
         if self._determine_source(video_path) == VideoSource.URL:
             video_path = self._download_video(video_path, ffmpeg_location)
 
         # Call whisperai
         with open(video_path, "rb") as f:
-            transcription = openai.Audio.transcribe("whisper-1", f, **data)
+            transcription = openai.Audio.transcribe("whisper-1", f, **default_data)
 
         return transcription
 
@@ -115,7 +123,7 @@ class Transcriber:
             url = "https://www.youtube.com/watch?v=cNplZrRSjeI"
 
             data = {
-                "response_format": "srt",
+                "response_format": "text",
                 "temperature": 0.5,
             }
 
@@ -146,11 +154,18 @@ class Transcriber:
             str: translation
         """
 
+        default_data = {
+            "response_format": "text",
+            "temperature": 0.5,
+        }
+
+        default_data.update(**data)
+
         if self._determine_source(video_path) == VideoSource.URL:
             video_path = self._download_video(video_path, ffmpeg_location)
 
         with open(video_path, "rb") as f:
-            translation = openai.Audio.translate("whisper-1", f, **data)
+            translation = openai.Audio.translate("whisper-1", f, **default_data)
 
         return translation
 

@@ -55,7 +55,7 @@ def test_transcribe(instance, monkeypatch):
         def temp_file(self, video_path, ffmpeg_location=None):
             return tmp.name
 
-        def mock_transcribe(self, video_path):
+        def mock_transcribe(self, video_path, ffmpeg_location=None, **data):
             return "transcribed text"
 
         video_path = "http://www.youtube.com/watch?v=9bZkp7q19f0"
