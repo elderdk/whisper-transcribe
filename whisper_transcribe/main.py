@@ -7,75 +7,35 @@ from typing import Tuple
 import openai
 import yt_dlp
 
-from .helpers import VideoSource, check_if_valid, count_tokens, chunk_generator
-from .summarizer.api_call import APICaller
+from .helpers import VideoSource, count_tokens, chunk_generator
 
 
 class Transcriber:
-    """Transcribe audio from a video file or URL
-
-    Args:
-        api_key (str): OpenAI API key
-        video_path (str): Path to video file or URL
-        prompt (str, optional): Prompt to help WhisperAI transcribe the audio. Defaults to None.
-        output (str, optional): Output format. Defaults to "text".
-        prompt_ratio (int, optional): How much token should be given to the request prompt. Defaults to 0.4 (40% of max token).
-        logging_level (int, optional): Logging level. Defaults to logging.INFO.
-        ffmepg_location (str, optional): Location of ffmpeg. Defaults to None.
-
-    Example:
-        >>> from whisper_transcribe import Transcriber
-
-            api_key = "sk-XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX"
-            video_path = "path/to/a/local/video.mp4"
-            prompt = "This prompt will help WhisperAI transcribe the audio."
-            output = "srt"
-            prompt_ratio = 0.5
-            logging_level = logging.INFO
-
-            with Transcriber(
-                api_key=api_key, video_path=video_path, output=output, prompt=prompt, prompt_ratio=prompt_ratio, logging_level=logging_level
-            ) as t:
-                t.transcribe_and_summarize()
-
-    """
-
-    MAX_TOTAL_TOKENS = 4096
-
-    def __init__(
-        self,
-        api_key: str,
-        video_path: str,
-        prompt: str = None,
-        output: str = "text",
-        prompt_ratio: float = 0.4,
-        logging_level: int = logging.INFO,
-        ffmpeg_location: str = None,
-    ):
+    def __init__(self, api_key: str, logging_level: int = logging.INFO) -> None:
         openai.api_key = api_key
+        logging.basicConfig(level=logging_level, format="%(levelname)s-%(message)s")
 
-        logging.basicConfig(level=logging_level)
-        logging.basicConfig(format="%(levelname)s-%(message)s")
-
-        self.api_key = api_key
-        self.video_path = video_path
-        self.output = output
-        self.prompt = prompt
-        self.prompt_ratio = prompt_ratio
-        self.max_prompt_tokens = int(self.MAX_TOTAL_TOKENS * self.prompt_ratio)
-        self.ffmpeg_location = ffmpeg_location
-        self.video_source = self._determine_source()
-        check_if_valid(self)
-
-    def _determine_source(self) -> VideoSource:
-        if self.video_path.startswith("http"):
-            return VideoSource.URL
-        if Path(self.video_path).is_file():
-            return VideoSource.LOCAL
+    def _determine_source(self, video_path) -> VideoSource:
+        if video_path.startswith("http"):
+            self.video_source = VideoSource.URL
+        elif Path(video_path).is_file():
+            self.video_source = VideoSource.LOCAL
         else:
-            return VideoSource.UNDETERMINED
+            self.video_source = VideoSource.UNDETERMINED
+            raise ValueError(
+                "Unable to determine video source. Please check the video path."
+            )
 
-    def _download_video(self):
+        return self.video_source
+
+    def _get_video_path(self, video_path: str) -> str:
+        if self._determine_source(video_path) == VideoSource.URL:
+            return self._download_video(video_path)
+        else:
+            self.video_path = video_path
+            return self.video_path
+
+    def _download_video(self, video_path: str, ffmpeg_location: str = None) -> str:
 
         with NamedTemporaryFile(delete=False) as tmp:
             ydl_opts = {
@@ -83,7 +43,7 @@ class Transcriber:
                 "outtmpl": tmp.name + ".m4a",
                 "overwrites": True,
                 "quiet": True,
-                "ffmpeg_location": self.ffmpeg_location,
+                "ffmpeg_location": ffmpeg_location,
                 "postprocessors": [
                     {  # Extract audio using ffmpeg
                         "key": "FFmpegExtractAudio",
@@ -92,111 +52,174 @@ class Transcriber:
                 ],
             }
             with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-                ydl.download([self.video_path])
+                ydl.download([video_path])
 
-        return tmp.name + ".m4a"
+        self.video_path = tmp.name + ".m4a"
 
-    def _summarize(self, text) -> str:
-        """Summarize the given text using OpenAI Completipn API
+        return self.video_path
 
-        Split the text into a list of words, then loop through the list
-        Add words to the prompt until token hits above 2900
-        Count the number of tokens to be in the response
-        Make the call.
+    def transcribe(self, video_path, ffmpeg_location=None, **data) -> str:
+        """Transcribe a video file or URL
 
-        Args:
-            text (str): Text to be summarized
+        Example:
 
-        Returns:
-            response (str): Summarized text
-        """
-
-        call_count = 1
-        response = ""
-
-        for chunk in chunk_generator(
-            text, self.max_prompt_tokens, count_tokens(self.prompt)
-        ):
-
-            prompt = "{}\n\n{}\ntl;dr".format(self.prompt if self.prompt else "", chunk)
-            prompt_token_count = count_tokens(prompt)
+            url = "https://www.youtube.com/watch?v=fLeJJPxua3E"
 
             data = {
-                "api_key": self.api_key,
-                "model": "text-davinci-003",
-                "temperature": 1.2,
-                "max_tokens": self.MAX_TOTAL_TOKENS - prompt_token_count,
-                "prompt": prompt,
+                "prompt": "What would you do if you only have 24 hours?",
+                "response_format": "srt",
+                "temperature": 0.5,
             }
 
-            api_caller = APICaller(**data)
+            with TranscriberTwo(api_key=api_key) as tt:
+
+                transcription = tt.transcribe(
+                    url, **data
+                )
+                print(transcription)
+
+        Args:
+            video_path (str): Path to the video. URL or local path.
+            ffmpeg_location (str, optional): ffmpeg required to convert a video
+                                             to an audio file for transcription.
+                                             Defaults to None. If None, ffmpeg
+                                             is assumed to be in the PATH.
+            **data: parameters required to call openai.Audio.transcribe
+                    Visit https://platform.openai.com/docs/api-reference/audio/create
+                    for more information.
+
+                prompt (str, optional): Defaults to None.
+                response_format (str, optional): Defaults to "text".
+                temperature (float, optional): Defaults to 0.
+                language (str, optional): Video's language. Defaults to "en".
+
+        Returns:
+            str: transcription
+        """
+
+        # Download the video if it's a URL
+        if self._determine_source(video_path) == VideoSource.URL:
+            video_path = self._download_video(video_path, ffmpeg_location)
+
+        # Call whisperai
+        with open(video_path, "rb") as f:
+            transcription = openai.Audio.transcribe("whisper-1", f, **data)
+
+        return transcription
+
+    def translate(self, video_path, ffmpeg_location=None, **data):
+        """Translate a video file or URL into English.
+
+        Example:
+
+            url = "https://www.youtube.com/watch?v=cNplZrRSjeI"
+
+            data = {
+                "response_format": "srt",
+                "temperature": 0.5,
+            }
+
+            with TranscriberTwo(api_key=api_key) as tt:
+
+                translation = tt.transcribe(
+                    url, **data
+                )
+                print(translation)
+
+        Args:
+            video_path (str): Path to the video. URL or local path.
+            ffmpeg_location (str, optional): ffmpeg required to convert a video
+                                             to an audio file for transcription.
+                                             Defaults to None. If None, ffmpeg
+                                             is assumed to be in the PATH.
+            **data: parameters required to call openai.Audio.transcribe
+                    Visit https://platform.openai.com/docs/api-reference/audio/create
+                    for more information.
+
+                prompt (str, optional): Defaults to None.
+                response_format (str, optional): Defaults to "text".
+                temperature (float, optional): Defaults to 0.
+                language (str, optional): Video's language. Defaults to "en".
+
+
+        Returns:
+            str: translation
+        """
+
+        if self._determine_source(video_path) == VideoSource.URL:
+            video_path = self._download_video(video_path, ffmpeg_location)
+
+        with open(video_path, "rb") as f:
+            translation = openai.Audio.translate("whisper-1", f, **data)
+
+        return translation
+
+    def summarize(self, text, prompt_tokens, **data):
+        """Summarize a text using OpenAI.
+
+        Exapmle:
+            with Transcriber(api_key=api_key) as tt:
+                prompt_tokens = 2000
+                data = {
+                    "max_tokens": 4096,
+                    "prompt": "",
+                    "model": "text-davinci-003",
+                    "temperature": 1.2,
+                }
+
+                summary = tt.summarize(text, prompt_tokens, **data)
+                print(summary)
+
+        Args:
+            text (str): Text to be summarized.
+            prompt_tokens (int): How many tokens to use as a prompt. This determines
+                                 the length of the text to be fed into OpenAI at one
+                                 time. More prompt tokens will lead to shorter summary,
+                                 and less prompt token means longer summary, although
+                                 not proportionally consistent.
+
+        Returns:
+            str: Summary of the text.
+        """
+        # Update the default data with the user's data
+        kwargs = dict()
+        kwargs.update(data)
+
+        summary = ""
+        max_tokens = kwargs["max_tokens"]
+        call_count = 1
+
+        for chunk in chunk_generator(text, prompt_tokens, count_tokens(data["prompt"])):
+
+            prompt = "{}\n\n{}\ntl;dr".format(chunk, data["prompt"])
+            prompt_token_count = count_tokens(prompt)
+
+            kwargs["prompt"] = prompt
+            kwargs["max_tokens"] = max_tokens - prompt_token_count
+
+            result = openai.Completion.create(**kwargs)
 
             logging.info(
                 " Summarizing...{}, prompt token count: {}, prompt length: {}".format(
                     call_count, prompt_token_count, len(prompt)
                 )
             )
-            call_count += 1
+
             logging.debug(" Prompt: {}".format(prompt))
 
-            result = api_caller.get_text_result()
+            call_count += 1
 
-            response += " " + result.replace(":", "").strip()
+            summary += " " + result["choices"][0]["text"]
 
-        return response
-
-    def transcribe(self) -> str:
-        """Transcribe audio from a video file or URL
-
-        Check the video_source. If URL, initiate download and save into a
-        Named temporary file.
-
-        Calls openai.Audio.transcribe.
-
-        Returns:
-            transcript (str): Transcribed text
-
-        """
-
-        if self.video_source == VideoSource.URL:
-            self.video_path = self._download_video()
-
-        logging.info("Transcribing audio from {}".format(self.video_path))
-
-        with open(self.video_path, "rb") as f:
-            transcript = openai.Audio.transcribe(
-                "whisper-1", f, response_format=self.output, prompt=self.prompt
-            )
-
-        return transcript
-
-    def transcribe_and_summarize(self) -> Tuple[str, str]:
-        """Transcribe and summarize
-        Force change the output if it's not text since summarizing from srt
-        doesn't make sense.
-
-
-        Returns:
-            Tuple[str, str]: transcribed text, summarized text
-        """
-        if self.output != "text":
-            print(
-                "To summarize, output must be text. Force changing output from {} to text.".format(
-                    self.output
-                )
-            )
-            self.output = "text"
-
-        transcript = self.transcribe()
-        summary = self._summarize(transcript)
-        return (transcript, summary)
+        return summary
 
     def __enter__(self):
         return self
 
     def __exit__(self, exc_type, exc_value, traceback):
-        if self.video_source == VideoSource.URL and Path(self.video_path).is_file():
-            os.remove(self.video_path)
+        if hasattr(self, "video_source"):
+            if self.video_source == VideoSource.URL and Path(self.video_path).is_file():
+                os.remove(self.video_path)
         return False
 
 
